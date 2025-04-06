@@ -21,4 +21,5 @@ VULN_TYPES = {
     "getter": GETTER_SINKS,
     "setter": SETTER_SINKS,
     "memcpy": MEMCPY_SINKS,
+    "array": None,
 }

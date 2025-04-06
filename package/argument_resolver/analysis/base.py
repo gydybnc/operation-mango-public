@@ -59,6 +59,7 @@ from argument_resolver.utils.calling_convention import (
     LIBRARY_DECLS,
 )
 from argument_resolver.utils.rda import CustomRDA
+from argument_resolver.utils.arraysinktest3 import *
 from argument_resolver.utils.stored_function import StoredFunction
 from argument_resolver.utils.utils import Utils
 from argument_resolver.formatters.log_formatter import CustomTextColumn
@@ -277,7 +278,8 @@ class ScriptBase:
     def load_excluded_functions(
         self, excluded_functions: List[str] = None
     ) -> Dict[Function, Set[Tuple]]:
-
+        if self.category =='array':
+            return {}
         default_excluded_functions = self.find_default_excluded_functions()
         excluded_dict = {}
         valid_sinks = []
@@ -309,10 +311,13 @@ class ScriptBase:
             sinks = [Sink(custom_sink, [arg_pos + 1])]
         else:
             category = category.lower()
+            if category == 'array':
+                return sinks
             if category in VULN_TYPES:
                 sinks = VULN_TYPES[category]
             if len(sinks) == 0:
                 sinks = VULN_TYPES["cmdi"]
+            
         return sinks
 
     @staticmethod
@@ -340,6 +345,43 @@ class ScriptBase:
 
     def analyze(self):
         self.analysis_start_time = time.time()
+        if self.category == 'array':
+            try:
+                detector = ArrayAccessSinkDetector(self.project)
+                detector.detect_sinks()
+                tracer = TaintTracer(self.project, detector)
+                results = tracer.trace_sinks()
+                if results:
+                    for item in results['param_sinks']:
+                        new_sink = Sink(item['func_name'], [item['param_index'] + 1])
+                        
+                        # 检查是否已存在相同的 Sink（通过属性判断）
+                        is_duplicate = False
+                        for existing_sink in self.sinks:
+                            if (existing_sink.name == new_sink.name and 
+                                existing_sink.vulnerable_parameters == new_sink.vulnerable_parameters):
+                                is_duplicate = True
+                                break
+                        
+                        # 非重复项则添加到列表
+                        if not is_duplicate:
+                            self.sinks.append(new_sink)
+                            
+                    default_excluded_functions = self.find_default_excluded_functions()
+                    excluded_dict = {}
+                    for f_sink in self.sinks:
+                        if f_sink.name not in self.project.kb.functions:
+                            continue
+                        sink_func = self.project.kb.functions[f_sink.name]
+                        excluded_dict[sink_func] = default_excluded_functions
+                        self.excluded_functions = excluded_dict
+
+                    if results['tainted_sinks']:
+                        self.analysis_time = time.time() - self.analysis_start_time
+                        self.save_my_results(result = results['tainted_sinks'])
+                    
+            except Exception:
+                pass
 
         try:
             for sink, sink_function in self.get_sink_callsites(self.sinks):
@@ -426,6 +468,13 @@ class ScriptBase:
                 ipdb.post_mortem(exc_traceback)
             exit(-1)
 
+    def save_my_results(self):
+        """
+        Save results of my array analysis
+        :return:
+        """
+        pass
+
     def save_results(self):
         """
         Save results of analysis
@@ -465,7 +514,7 @@ class ScriptBase:
 
         final_sinks = []
         for sink in sinks:
-            function = self.project.kb.functions.function(name=sink.name)
+            function = self.project.kb.functions.function(name=sink.name)         
             if function is None:
                 continue
 
@@ -480,7 +529,6 @@ class ScriptBase:
                 function.prototype = self._calling_convention_resolver.get_prototype(
                     function.name
                 )
-
             final_sinks.append((sink, function))
 
         return final_sinks

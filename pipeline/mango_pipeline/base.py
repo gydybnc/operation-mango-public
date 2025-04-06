@@ -99,7 +99,7 @@ class Pipeline:
         self.timeout = timeout
         self.rda_timeout = rda_timeout
         self.bin_prep = bin_prep
-        self.container_name = "mango_user"
+        self.container_name = "mango_user1"
         self.docker_file = Path(__file__).parent.parent.parent / "docker" / "Dockerfile"
         self.vendor_dict = {}
         self.exclude_libs = exclude_libs
@@ -209,7 +209,10 @@ class Pipeline:
             self.run_env_resolve(env_targets)
 
         if self.is_mango:
-            mango_targets = self.filter_mango_targets(targets, symbols)
+            if self.category == 'array':
+                mango_targets = targets
+            else:
+                mango_targets = self.filter_mango_targets(targets, symbols)
             self.run_mango(mango_targets)
             self.mango_results_to_csv()
 

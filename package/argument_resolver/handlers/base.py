@@ -57,6 +57,7 @@ class HandlerBase(FunctionHandler):
         :param sink_function:
         :param sink_atoms:
         """
+        self.interfunction_level = 0
         self._project = project
         self._calling_convention_resolver = None
         self._rda = None

@@ -1,8 +1,8 @@
 import subprocess
-
+import hashlib
 import time
 import json
-
+import os
 from pathlib import Path
 from typing import Dict, Tuple, List
 
@@ -50,6 +50,59 @@ class MangoAnalysis(ScriptBase):
                     output.extend(closure["output"])
             self.result_formatter.log_closures_for_sink(output, sink, self.log)
         self.save_results_to_file(None, None)
+
+    def save_my_results(self, result = None, check_if_sanitized=False):
+        has_sinks = 1
+        if self.result_path is not None:
+            self.result_path.mkdir(parents=True, exist_ok=True)
+
+            res_name = f"{self.category}_results.json" if self.category is not None else "results.json"
+            result_file = self.result_path / res_name
+
+            file = Path(self.project.filename)
+
+            if result_file.exists():
+                closure_dict = json.loads(result_file.read_text())
+            else:
+                with file.open("rb") as f:
+                    sha_sum = hashlib.file_digest(f, "sha256").hexdigest()
+
+                closure_dict = {
+                    "closures": [],
+                    "cfg_time": self.cfg_time,
+                    "vra_time": self.vra_time,
+                    "path": str(file.absolute()),
+                    "name": file.name,
+                    "has_sinks": has_sinks,
+                    "sha256": sha_sum,
+                    "sink_times": {},
+                    "error": None,
+                }
+
+                closure_dict["mango_time"] = (
+                    sum(self.analysis_timee) if isinstance(self.analysis_time, list) else self.analysis_time
+                )
+                closure_dict["sinks"] = len(result)
+                curr_sink = None
+                for item in result:
+                    c_d =  {
+                        "trace": item['trace'],
+                        "sink": item['sink_addr'],
+                        "rank": 10,
+                    }
+                    closure_dict["closures"].append(c_d)
+
+                closure_dict["time_data"] = {
+                    " -> ".join(hex(x) for x in k): v for k, v in self.time_data.items()
+                }
+                if curr_sink is not None:
+                    if "sink_times" not in closure_dict:
+                        closure_dict["sink_times"] = {}
+                    closure_dict["sink_times"][curr_sink] = self.sink_time
+
+                with open(result_file, "w+") as f:
+                    json.dump(closure_dict, f, indent=4)
+                os.chmod(result_file, 0o666)
 
     @staticmethod
     def similar_closure(closure_1, closure_2) -> bool:
